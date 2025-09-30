@@ -106,6 +106,14 @@ integration_roadmap:
     success_criteria: "Исследовательские результаты для будущих версий"
 
 total_viable_ideas: 8
-total_killed_ideas: 4
+total_killed_ideas: 5
 integration_complexity: "medium"
 estimated_timeline: "6-9 months for full implementation"
+
+
+  - idea_id: "KILL-005"
+    description: "Использование Vercel для продакшн-деплоя"
+    kill_reason: "Проблемы с миграцией и потенциальные ограничения"
+    lesson: "Выбор платформы деплоя должен быть обоснован долгосрочной стратегией"
+
+

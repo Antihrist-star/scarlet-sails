@@ -117,8 +117,15 @@ emergency_procedures:
     statement: "Incident response начинается через 1 минуту после алерта"
     enforced_by: "PagerDuty integration + escalation matrix"
 
-total_rules: 23
+total_rules: 24
 enforcement_level: "strict"
 violation_consequences: "Automatic build failure + mandatory review"
 review_frequency: "quarterly"
 last_updated: "2025-09-28T06:51:50-04:00"
+
+
+  - rule_id: "ARCH-005"
+    statement: "Выбор платформы деплоя (Render, Vercel) должен быть обоснован долгосрочной стратегией и возможностью масштабирования"
+    enforced_by: "Архитектурное ревью перед выбором платформы"
+
+

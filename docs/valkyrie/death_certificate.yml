@@ -83,7 +83,7 @@ process_errors:
     consequence: "Потеря знаний и сложность onboarding"
     lesson: "Living documentation как часть кода"
 
-total_errors: 13
+total_errors: 15
 lessons_learned: 13
 resurrection_blockers:
   - "Отсутствие рабочего MVP"
@@ -92,3 +92,18 @@ resurrection_blockers:
   - "Неконтролируемая сложность"
 
 final_verdict: "TERMINAL - рекомендуется полная реинкарнация в Scarlet Sails"
+
+
+  - error_id: "TECH-006"
+    type: "technical"
+    manifestation: "Недостаточная автоматизация развертывания на Render"
+    consequence: "Ручные ошибки, медленный цикл деплоя"
+    lesson: "Автоматизированные, идемпотентные пайплайны развертывания"
+
+  - error_id: "PROC-004"
+    type: "process"
+    manifestation: "Отсутствие интеграции мониторинга и логирования с Render"
+    consequence: "Сложность отладки и выявления проблем в продакшене"
+    lesson: "Интегрированный мониторинг и логирование для всех сервисов"
+
+
