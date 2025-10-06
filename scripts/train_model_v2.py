@@ -5,7 +5,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
 import os
 import numpy as np
-from prepare_data import load_and_preprocess_data
+from prepare_data_v3 import load_and_preprocess_data_v3
 
 class CNN1D(nn.Module):
     def __init__(self, input_channels, output_size):
@@ -20,7 +20,7 @@ class CNN1D(nn.Module):
         self.fc2 = nn.Linear(50, output_size)
     
     def _get_conv_output_size(self, input_channels):
-        dummy_input = torch.randn(1, input_channels, 60)  # Исправлено на 60
+        dummy_input = torch.randn(1, input_channels, 100)  # Исправлено
         x = self.conv1(dummy_input)
         x = self.relu(x)
         x = self.pool(x)
@@ -40,9 +40,9 @@ class CNN1D(nn.Module):
         x = self.fc1(x)
         x = self.relu(x)
         x = self.fc2(x)
-        return x
+        return x  # Убран sigmoid
 
-def train_model(X, y, model_path="models/1d_cnn_model.pth", epochs=30, batch_size=64, learning_rate=0.001):
+def train_model(X, y, model_path="models/1d_cnn_model.pth", epochs=20, batch_size=32, learning_rate=0.001):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
     train_dataset = TensorDataset(X_train, y_train)
@@ -59,8 +59,6 @@ def train_model(X, y, model_path="models/1d_cnn_model.pth", epochs=30, batch_siz
     X_test = X_test.to(device)
     y_test = y_test.to(device)
     print(f"Using device: {device}")
-    print(f"Training samples: {len(X_train)}, Test samples: {len(X_test)}")
-    print(f"Features: {input_channels}")
     
     for epoch in range(epochs):
         model.train()
@@ -86,7 +84,7 @@ def train_model(X, y, model_path="models/1d_cnn_model.pth", epochs=30, batch_siz
         outputs = model(X_test_permuted)
         predictions = torch.sigmoid(outputs) > 0.5
         accuracy = (predictions.squeeze() == y_test).float().mean()
-        print(f"Final Test Accuracy: {accuracy:.4f}")
+        print(f"Test Accuracy: {accuracy:.4f}")
     
     os.makedirs(os.path.dirname(model_path), exist_ok=True)
     torch.save(model.state_dict(), model_path)
@@ -95,7 +93,7 @@ def train_model(X, y, model_path="models/1d_cnn_model.pth", epochs=30, batch_siz
     return model
 
 if __name__ == "__main__":
-    X, y, scaler_X, scaler_y = load_and_preprocess_data()
-    print(f"Data loaded: X{X.shape}, y{y.shape}")
+    X, y, scaler_X, features = load_and_preprocess_data_v3(symbol="BTC/USDT")  # Исправлено
+    print(f"Training on {len(features)} features: {features}")
     trained_model = train_model(X, y)
     print("Model training complete.")
