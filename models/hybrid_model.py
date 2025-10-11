@@ -1,197 +1,79 @@
-"""
-CNN-LSTM Hybrid для Scarlet Sails Phoenix v2
-Автор: Сотрудник 2
-Создан: Day 9
-
-Архитектура:
-- CNN: локальные паттерны (candlestick formations)
-- LSTM: temporal dependencies (trend evolution)
-- Output: Binary classification (UP/DOWN)
-"""
-
 import torch
 import torch.nn as nn
 
 
-class CNNLSTMHybrid(nn.Module):
-    """
-    Hybrid model для swing trading (3-7 дней).
+class HybridModel(nn.Module):
+    """CNN-LSTM Hybrid for swing trading prediction"""
     
-    Parameters:
-        input_features (int): Количество features (default: 38)
-        seq_len (int): Длина sequence (default: 240)
-        cnn_channels (list): CNN output channels (default: [64, 32])
-        lstm_hidden (int): LSTM hidden size (default: 64)
-        lstm_layers (int): Количество LSTM layers (default: 2)
-        dropout (float): Dropout rate (default: 0.3)
-    """
-    
-    def __init__(
-        self,
-        input_features=38,
-        seq_len=240,
-        cnn_channels=[64, 32],
-        lstm_hidden=64,
-        lstm_layers=2,
-        dropout=0.3
-    ):
-        super(CNNLSTMHybrid, self).__init__()
+    def __init__(self, input_features=31, sequence_length=60):
+        super().__init__()
         
-        self.input_features = input_features
-        self.seq_len = seq_len
-        
-        # CNN Block для feature extraction
-        self.cnn = nn.Sequential(
-            nn.Conv1d(
-                in_channels=input_features,
-                out_channels=cnn_channels[0],
-                kernel_size=5,
-                padding=2
-            ),
-            nn.BatchNorm1d(cnn_channels[0]),
+        # CNN Block - local pattern extraction
+        self.cnn_block = nn.Sequential(
+            nn.Conv1d(in_channels=input_features, out_channels=16, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Dropout(dropout),
-            
-            nn.Conv1d(
-                in_channels=cnn_channels[0],
-                out_channels=cnn_channels[1],
-                kernel_size=3,
-                padding=1
-            ),
-            nn.BatchNorm1d(cnn_channels[1]),
+            nn.MaxPool1d(2),
+            nn.Conv1d(in_channels=16, out_channels=32, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Dropout(dropout)
+            nn.AdaptiveMaxPool1d(sequence_length // 2)
         )
         
-        # LSTM Block для temporal dependencies
+        # LSTM Block - temporal memory
         self.lstm = nn.LSTM(
-            input_size=cnn_channels[1],
-            hidden_size=lstm_hidden,
-            num_layers=lstm_layers,
-            batch_first=True,
-            dropout=dropout if lstm_layers > 1 else 0,
-            bidirectional=False
+            input_size=32,           # CNN output channels
+            hidden_size=64,          # LSTM hidden size
+            num_layers=2,            # 2 layers for depth
+            batch_first=True,        # (batch, seq, features)
+            dropout=0.3,             # Between layers
+            bidirectional=False      # CRITICAL: no future info
         )
         
-        # Output Block
+        # Output layers
         self.fc = nn.Sequential(
-            nn.Linear(lstm_hidden, 32),
+            nn.Linear(64, 32),       # LSTM hidden → FC
             nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(32, 2)
+            nn.Dropout(0.3),
+            nn.Linear(32, 2)         # Binary: [DOWN, UP]
         )
     
     def forward(self, x):
         """
-        Forward pass.
+        Forward pass through CNN → LSTM → Output
         
         Args:
-            x: Input tensor (batch_size, seq_len, features)
-        
+            x: (batch, seq_len, features) - input sequences
+            
         Returns:
-            output: Logits (batch_size, 2)
+            output: (batch, 2) - logits for [DOWN, UP]
         """
         batch_size = x.size(0)
         
-        # CNN expects: (batch, channels, length)
-        x = x.transpose(1, 2)
+        # CNN expects: (batch, channels, seq_len)
+        x = x.transpose(1, 2)  # → (batch, features, seq_len)
         
-        # CNN forward
-        x = self.cnn(x)
+        # CNN feature extraction
+        x = self.cnn_block(x)  # → (batch, 32, seq_len//2)
         
         # LSTM expects: (batch, seq_len, features)
-        x = x.transpose(1, 2)
+        x = x.transpose(1, 2)  # → (batch, seq_len//2, 32)
         
-        # LSTM forward
+        # LSTM temporal modeling
         lstm_out, (hidden, cell) = self.lstm(x)
+        # hidden: (num_layers, batch, hidden_size)
         
-        # Use последний hidden state
-        final_hidden = hidden[-1]
+        # Use last layer's hidden state
+        final_hidden = hidden[-1]  # → (batch, 64)
         
-        # Output layer
-        output = self.fc(final_hidden)
+        # Output classification
+        output = self.fc(final_hidden)  # → (batch, 2)
         
         return output
-    
-    def get_model_info(self):
-        """
-        Получить информацию о модели.
-        """
-        total_params = sum(p.numel() for p in self.parameters())
-        trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
-        
-        info = {
-            'total_parameters': total_params,
-            'trainable_parameters': trainable_params,
-            'model_size_mb': total_params * 4 / 1024 / 1024,
-            'input_shape': f"(batch, {self.seq_len}, {self.input_features})",
-            'output_shape': "(batch, 2)"
-        }
-        
-        return info
 
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("CNN-LSTM Hybrid Model Test")
-    print("=" * 60)
-    
-    # Create model
-    model = CNNLSTMHybrid(
-        input_features=38,
-        seq_len=240,
-        cnn_channels=[64, 32],
-        lstm_hidden=64,
-        lstm_layers=2,
-        dropout=0.3
-    )
-    
-    # Print model info
-    info = model.get_model_info()
-    print("\nModel Information:")
-    for key, value in info.items():
-        print(f"  {key}: {value}")
-    
-    # Test forward pass (CPU)
-    print("\n" + "-" * 60)
-    print("Testing forward pass (CPU)...")
-    
-    batch_size = 16
-    x = torch.randn(batch_size, 240, 38)
-    
-    print(f"Input shape: {x.shape}")
-    
+    # Test model
+    model = HybridModel(input_features=31, sequence_length=60)
+    x = torch.randn(4, 60, 31)
     output = model(x)
-    
-    print(f"Output shape: {output.shape}")
-    print(f"Output sample:\n{output[:2]}")
-    
-    # Check GPU if available
-    if torch.cuda.is_available():
-        print("\n" + "-" * 60)
-        print("Testing forward pass (GPU)...")
-        
-        model = model.cuda()
-        x = x.cuda()
-        
-        output = model(x)
-        
-        print("GPU forward pass successful!")
-        print(f"Output shape: {output.shape}")
-    else:
-        print("\nCUDA not available, skipping GPU test")
-    
-    # Test with different batch sizes
-    print("\n" + "-" * 60)
-    print("Testing different batch sizes...")
-    
-    model = model.cpu()
-    
-    for bs in [1, 8, 32, 64]:
-        x = torch.randn(bs, 240, 38)
-        output = model(x)
-        print(f"  Batch size {bs:2d}: {output.shape} OK")
-    
-    print("\n" + "=" * 60)
-    print("ALL TESTS PASSED!")
-    print("=" * 60)
+    print(f"✅ Model test: {x.shape} → {output.shape}")
+    print(f"✅ Parameters: {sum(p.numel() for p in model.parameters()):,}")
