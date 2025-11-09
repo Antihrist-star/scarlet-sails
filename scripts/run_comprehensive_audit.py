@@ -119,20 +119,17 @@ def run_phase_1():
 
 def run_phase_2():
     """Phase 2: Walk-forward validation"""
-    print("\n⚠️  PHASE 2: Walk-forward Validation - NOT YET IMPLEMENTED")
-    return None
+    return run_script('phase2_walk_forward_validation.py', 'PHASE 2: Walk-Forward Validation')
 
 
 def run_phase_3():
     """Phase 3: Root cause analysis"""
-    print("\n⚠️  PHASE 3: Root Cause Analysis - NOT YET IMPLEMENTED")
-    return None
+    return run_script('phase3_root_cause_analysis.py', 'PHASE 3: Root Cause Analysis')
 
 
 def run_phase_4():
     """Phase 4: Decision matrix"""
-    print("\n⚠️  PHASE 4: Decision Matrix - NOT YET IMPLEMENTED")
-    return None
+    return run_script('phase4_decision_matrix.py', 'PHASE 4: Decision Matrix')
 
 
 def main():
