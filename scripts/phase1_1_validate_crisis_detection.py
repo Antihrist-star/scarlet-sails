@@ -54,62 +54,59 @@ print(f"✅ Loaded {len(df):,} bars")
 # ============================================================================
 print("\n🔍 Initializing crisis detector...")
 
-try:
-    crisis_detector = CrisisClassifier()
-    print("✅ CrisisClassifier loaded")
-except Exception as e:
-    print(f"❌ Failed to load CrisisClassifier: {e}")
-    print("\nWill use simple rule-based detector for testing...")
+# NOTE: CrisisClassifier requires trained model
+# For Phase 1.1 we use SimpleCrisisDetector (rule-based)
+print("Using SimpleCrisisDetector (rule-based) for validation...")
 
-    # Fallback: simple rule-based detector
-    class SimpleCrisisDetector:
-        def detect(self, df, bar_idx):
-            """Simple crisis detection: volatility spike + volume surge"""
-            if bar_idx < 24:
-                return {'is_crisis': False, 'confidence': 0.0, 'severity': 'NONE'}
+# Simple rule-based detector
+class SimpleCrisisDetector:
+    def detect(self, df, bar_idx):
+        """Simple crisis detection: volatility spike + volume surge"""
+        if bar_idx < 24:
+            return {'is_crisis': False, 'confidence': 0.0, 'severity': 'NONE'}
 
-            # Recent volatility vs baseline
-            recent_vol = df['close'].iloc[bar_idx-24:bar_idx].pct_change().std()
-            baseline_vol = df['close'].iloc[bar_idx-168:bar_idx-24].pct_change().std()
+        # Recent volatility vs baseline
+        recent_vol = df['close'].iloc[bar_idx-24:bar_idx].pct_change().std()
+        baseline_vol = df['close'].iloc[bar_idx-168:bar_idx-24].pct_change().std()
 
-            # Recent volume surge
-            recent_volume = df['volume'].iloc[bar_idx-24:bar_idx].mean()
-            baseline_volume = df['volume'].iloc[bar_idx-168:bar_idx-24].mean()
+        # Recent volume surge
+        recent_volume = df['volume'].iloc[bar_idx-24:bar_idx].mean()
+        baseline_volume = df['volume'].iloc[bar_idx-168:bar_idx-24].mean()
 
-            # Price drop
-            price_change_24h = (df['close'].iloc[bar_idx] - df['close'].iloc[bar_idx-24]) / df['close'].iloc[bar_idx-24]
+        # Price drop
+        price_change_24h = (df['close'].iloc[bar_idx] - df['close'].iloc[bar_idx-24]) / df['close'].iloc[bar_idx-24]
 
-            # Crisis if: high vol spike + volume surge + price drop
-            vol_spike = recent_vol / baseline_vol if baseline_vol > 0 else 1.0
-            vol_surge = recent_volume / baseline_volume if baseline_volume > 0 else 1.0
+        # Crisis if: high vol spike + volume surge + price drop
+        vol_spike = recent_vol / baseline_vol if baseline_vol > 0 else 1.0
+        vol_surge = recent_volume / baseline_volume if baseline_volume > 0 else 1.0
 
-            is_crisis = (vol_spike > 3.0 and vol_surge > 2.0 and price_change_24h < -0.15)
+        is_crisis = (vol_spike > 3.0 and vol_surge > 2.0 and price_change_24h < -0.15)
 
-            if is_crisis:
-                if vol_spike > 5.0 and price_change_24h < -0.3:
-                    severity = 'EXTREME'
-                    confidence = 0.9
-                elif vol_spike > 4.0 and price_change_24h < -0.2:
-                    severity = 'HIGH'
-                    confidence = 0.7
-                else:
-                    severity = 'MEDIUM'
-                    confidence = 0.5
+        if is_crisis:
+            if vol_spike > 5.0 and price_change_24h < -0.3:
+                severity = 'EXTREME'
+                confidence = 0.9
+            elif vol_spike > 4.0 and price_change_24h < -0.2:
+                severity = 'HIGH'
+                confidence = 0.7
             else:
-                severity = 'NONE'
-                confidence = 0.0
+                severity = 'MEDIUM'
+                confidence = 0.5
+        else:
+            severity = 'NONE'
+            confidence = 0.0
 
-            return {
-                'is_crisis': is_crisis,
-                'confidence': confidence,
-                'severity': severity,
-                'vol_spike': vol_spike,
-                'vol_surge': vol_surge,
-                'price_drop': price_change_24h
-            }
+        return {
+            'is_crisis': is_crisis,
+            'confidence': confidence,
+            'severity': severity,
+            'vol_spike': vol_spike,
+            'vol_surge': vol_surge,
+            'price_drop': price_change_24h
+        }
 
-    crisis_detector = SimpleCrisisDetector()
-    print("✅ Using SimpleCrisisDetector (rule-based)")
+crisis_detector = SimpleCrisisDetector()
+print("✅ Using SimpleCrisisDetector (rule-based)")
 
 # ============================================================================
 # TEST 1: KNOWN CRASH EVENTS

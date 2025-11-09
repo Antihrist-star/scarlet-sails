@@ -198,11 +198,15 @@ df['volume_ma'] = df['volume'].rolling(24).mean()
 df['volume_ratio'] = df['volume'] / df['volume_ma']
 print("   ✅ Volume features calculated")
 
-# Drop NaN rows
+# Fill crash columns with defaults (don't drop!)
+df['crash_event'] = df['crash_event'].fillna('NONE')
+df['crash_severity'] = df['crash_severity'].fillna('NONE')
+
+# Drop NaN rows from feature calculations only
 initial_len = len(df)
-df = df.dropna()
+df = df.dropna(subset=['rsi', 'atr', 'ma20', 'ma50', 'ma200', 'volatility', 'volume_ratio'])
 dropped = initial_len - len(df)
-print(f"   Dropped {dropped} rows with NaN (after calculations)")
+print(f"   Dropped {dropped} rows with NaN (from feature calculations)")
 
 # ============================================================================
 # SAVE PREPARED DATA
