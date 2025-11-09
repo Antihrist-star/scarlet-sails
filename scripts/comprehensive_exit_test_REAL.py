@@ -215,6 +215,7 @@ def backtest_hybrid(df, signals):
         entry_time = sig['timestamp']
 
         # Open position using CORRECT API ✅
+        # Note: HybridPositionManager detects regime internally
         position = hybrid.open_position(
             symbol='BTC/USDT',
             entry_price=entry_price,
@@ -223,7 +224,6 @@ def backtest_hybrid(df, signals):
             direction='long',
             df=df,
             current_bar=entry_bar,
-            regime=sig['regime'],
         )
 
         # Simulate holding position
