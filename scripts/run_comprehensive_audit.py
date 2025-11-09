@@ -77,13 +77,17 @@ def run_phase_1():
         'PHASE 1.1: Crisis Detection Validation'
     )
 
-    # 1.2: Regime detection (to be created)
-    print("\n⚠️  PHASE 1.2: Regime Detection - NOT YET IMPLEMENTED")
-    results['1.2'] = None
+    # 1.2: Regime detection
+    results['1.2'] = run_script(
+        'phase1_2_validate_regime_detection.py',
+        'PHASE 1.2: Regime Detection Validation'
+    )
 
-    # 1.3: Entry signals (to be created)
-    print("\n⚠️  PHASE 1.3: Entry Signals - NOT YET IMPLEMENTED")
-    results['1.3'] = None
+    # 1.3: Entry signals
+    results['1.3'] = run_script(
+        'phase1_3_validate_entry_signals.py',
+        'PHASE 1.3: Entry Signal Validation'
+    )
 
     # 1.4: Exit strategies (already tested in comprehensive_exit_test_REAL.py)
     results['1.4'] = run_script(
@@ -91,9 +95,11 @@ def run_phase_1():
         'PHASE 1.4: Exit Strategy Validation'
     )
 
-    # 1.5: ML models (to be created)
-    print("\n⚠️  PHASE 1.5: ML Models - NOT YET IMPLEMENTED")
-    results['1.5'] = None
+    # 1.5: ML models
+    results['1.5'] = run_script(
+        'phase1_5_validate_ml_models.py',
+        'PHASE 1.5: ML Models Validation'
+    )
 
     # Summary
     print("\n" + "="*100)
