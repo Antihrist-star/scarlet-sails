@@ -10,9 +10,15 @@ Author: Scarlet Sails Team
 Date: Day 11
 """
 
+import sys
+from pathlib import Path
+
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 import pandas as pd
 import numpy as np
-from pathlib import Path
 from datetime import datetime, timedelta
 import json
 import warnings
@@ -34,6 +40,21 @@ print("\n📂 Loading data...")
 df = pd.read_parquet('data/processed/btc_prepared_phase0.parquet')
 print(f"✅ Loaded {len(df):,} bars")
 print(f"   Period: {df.index[0]} to {df.index[-1]}")
+
+# Detect regime if not present
+if 'regime' not in df.columns:
+    print("\n🔍 Detecting market regimes...")
+    from models.regime_detector import SimpleRegimeDetector
+
+    regime_detector = SimpleRegimeDetector()
+    regimes = []
+
+    for i in range(len(df)):
+        regime = regime_detector.detect(df, i)
+        regimes.append(regime)
+
+    df['regime'] = regimes
+    print(f"✅ Regimes detected")
 
 # Generate entry signals
 print("\n📊 Generating entry signals (RSI < 30)...")
