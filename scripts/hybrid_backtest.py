@@ -332,22 +332,45 @@ def load_data(asset, timeframe):
 
 def add_indicators(df):
     """Add RSI and ATR if missing"""
+    # Check required columns
+    required = ['open', 'high', 'low', 'close', 'volume']
+    missing = [col for col in required if col not in df.columns]
+    if missing:
+        print(f"   ⚠️  Missing OHLCV columns: {missing}")
+        return df
+
+    # Add RSI if missing
     if 'rsi' not in df.columns and 'RSI_14' not in df.columns:
-        # Simple RSI
-        delta = df['close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        df['rsi'] = 100 - (100 / (1 + rs))
+        try:
+            # Simple RSI
+            delta = df['close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / (loss + 1e-10)  # Avoid division by zero
+            df['rsi'] = 100 - (100 / (1 + rs))
+
+            # Check if RSI was added successfully
+            rsi_valid = df['rsi'].notna().sum()
+            print(f"   ✅ Added RSI indicator ({rsi_valid} valid values)")
+        except Exception as e:
+            print(f"   ❌ Failed to add RSI: {e}")
+            return df
 
     if 'atr' not in df.columns and 'ATR_14' not in df.columns:
-        # Simple ATR
-        high_low = df['high'] - df['low']
-        high_close = abs(df['high'] - df['close'].shift())
-        low_close = abs(df['low'] - df['close'].shift())
-        ranges = pd.concat([high_low, high_close, low_close], axis=1)
-        true_range = ranges.max(axis=1)
-        df['atr'] = true_range.rolling(14).mean()
+        try:
+            # Simple ATR
+            high_low = df['high'] - df['low']
+            high_close = abs(df['high'] - df['close'].shift())
+            low_close = abs(df['low'] - df['close'].shift())
+            ranges = pd.concat([high_low, high_close, low_close], axis=1)
+            true_range = ranges.max(axis=1)
+            df['atr'] = true_range.rolling(14).mean()
+
+            # Check if ATR was added successfully
+            atr_valid = df['atr'].notna().sum()
+            print(f"   ✅ Added ATR indicator ({atr_valid} valid values)")
+        except Exception as e:
+            print(f"   ❌ Failed to add ATR: {e}")
 
     return df
 
