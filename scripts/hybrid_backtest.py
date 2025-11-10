@@ -278,8 +278,9 @@ def load_data(asset, timeframe):
     Looks for:
     1. Features file (data/features/{asset}USDT_{timeframe}.parquet)
     2. Raw file (data/raw/{asset}USDT_{timeframe}.parquet)
+    3. Raw file (data/raw/{asset}_USDT_{timeframe}.parquet) - with underscore
     """
-    # Try features first
+    # Try features first (no underscore)
     features_path = FEATURES_DIR / f"{asset}USDT_{timeframe}.parquet"
     if features_path.exists():
         try:
@@ -289,7 +290,17 @@ def load_data(asset, timeframe):
         except Exception as e:
             print(f"   ⚠️  Failed to load features: {e}")
 
-    # Try raw data
+    # Try features with underscore
+    features_path_us = FEATURES_DIR / f"{asset}_USDT_{timeframe}.parquet"
+    if features_path_us.exists():
+        try:
+            df = pd.read_parquet(features_path_us)
+            print(f"   ✅ Loaded features: {len(df)} bars")
+            return df
+        except Exception as e:
+            print(f"   ⚠️  Failed to load features: {e}")
+
+    # Try raw data (no underscore)
     raw_path = DATA_DIR / f"{asset}USDT_{timeframe}.parquet"
     if raw_path.exists():
         try:
@@ -302,7 +313,21 @@ def load_data(asset, timeframe):
         except Exception as e:
             print(f"   ⚠️  Failed to load raw: {e}")
 
+    # Try raw data with underscore (BTC_USDT_15m.parquet format)
+    raw_path_us = DATA_DIR / f"{asset}_USDT_{timeframe}.parquet"
+    if raw_path_us.exists():
+        try:
+            df = pd.read_parquet(raw_path_us)
+            print(f"   ✅ Loaded raw data: {len(df)} bars")
+
+            # Add basic indicators if missing
+            df = add_indicators(df)
+            return df
+        except Exception as e:
+            print(f"   ⚠️  Failed to load raw: {e}")
+
     print(f"   ❌ No data found for {asset} {timeframe}")
+    print(f"      Tried: {features_path}, {features_path_us}, {raw_path}, {raw_path_us}")
     return None
 
 def add_indicators(df):
