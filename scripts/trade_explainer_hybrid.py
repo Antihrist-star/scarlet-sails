@@ -434,15 +434,25 @@ def main():
 
     print(f"\n✅ Found {len(oversold_bars)} oversold bars (RSI < 30)")
 
-    # Sample 10 bars randomly
-    sample_indices = []
-    for timestamp in oversold_bars[:10]:  # First 10
-        bar_index = primary_df.index.get_loc(timestamp)
-        # Make sure we have enough data for exit
-        if bar_index + FORWARD_BARS < len(primary_df):
-            sample_indices.append(bar_index)
+    # Sample 10 bars from RECENT data (skip first 10,000 bars to ensure enough history)
+    # This avoids NaN issues with multi-timeframe features
+    MIN_BAR_INDEX = 10000  # ~104 days of 15m data, ensures all TF features available
 
-    print(f"\n🔬 Analyzing {len(sample_indices)} sample trades...\n")
+    sample_indices = []
+    for timestamp in oversold_bars[-200:]:  # Take from last 200 oversold bars
+        bar_index = primary_df.index.get_loc(timestamp)
+        # Make sure we have enough history AND enough data for exit
+        if bar_index >= MIN_BAR_INDEX and bar_index + FORWARD_BARS < len(primary_df):
+            sample_indices.append(bar_index)
+            if len(sample_indices) >= 10:  # Stop after 10 samples
+                break
+
+    if len(sample_indices) == 0:
+        print(f"⚠️  No oversold bars found with sufficient history (bar_index > {MIN_BAR_INDEX})")
+        print(f"   Try running on more recent data or reducing MIN_BAR_INDEX")
+        return
+
+    print(f"\n🔬 Analyzing {len(sample_indices)} sample trades (from recent data)...\n")
 
     # Explain each trade
     explanations = []
