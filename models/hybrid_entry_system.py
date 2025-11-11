@@ -210,11 +210,25 @@ class HybridEntrySystem:
         if bar_index < 200:
             return False, "Insufficient history (need 200+ bars)"
 
-        # Check RSI
-        if 'rsi' not in df.columns and 'RSI_14' not in df.columns:
-            return False, "RSI indicator not found in DataFrame"
+        # Check RSI (support multiple naming conventions)
+        rsi_col = None
 
-        rsi_col = 'rsi' if 'rsi' in df.columns else 'RSI_14'
+        # Try different RSI column names
+        if 'rsi' in df.columns:
+            rsi_col = 'rsi'
+        elif 'RSI_14' in df.columns:
+            rsi_col = 'RSI_14'
+        elif '15m_RSI_14' in df.columns:
+            rsi_col = '15m_RSI_14'
+        else:
+            # Search for any column with 'RSI' in name
+            rsi_candidates = [col for col in df.columns if 'RSI' in col.upper()]
+            if rsi_candidates:
+                rsi_col = rsi_candidates[0]
+
+        if rsi_col is None:
+            return False, f"RSI indicator not found (checked: rsi, RSI_14, 15m_RSI_14, and others)"
+
         rsi = df[rsi_col].iloc[bar_index]
 
         if rsi >= self.rsi_threshold:
