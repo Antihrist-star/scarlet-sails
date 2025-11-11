@@ -84,7 +84,8 @@ class ModelAuditor:
         # Apply date cutoff if specified
         df = self.df.copy()
         if date_cutoff:
-            df = df[df.index < pd.Timestamp(date_cutoff)]
+            cutoff_ts = pd.Timestamp(date_cutoff, tz='UTC')
+            df = df[df.index < cutoff_ts]
             if len(df) < FORWARD_BARS:
                 return {'error': f'Not enough data before {date_cutoff}'}
 
@@ -174,7 +175,7 @@ class ModelAuditor:
 
         # Apply date cutoff if specified
         if date_cutoff:
-            cutoff_ts = pd.Timestamp(date_cutoff)
+            cutoff_ts = pd.Timestamp(date_cutoff, tz='UTC')
             primary_df = primary_df[primary_df.index < cutoff_ts]
             # Also filter all_tf dataframes
             for tf_key in all_tf:
@@ -295,7 +296,7 @@ class ModelAuditor:
 
         # Apply date cutoff if specified
         if date_cutoff:
-            cutoff_ts = pd.Timestamp(date_cutoff)
+            cutoff_ts = pd.Timestamp(date_cutoff, tz='UTC')
             self.df = self.df[self.df.index < cutoff_ts]
             primary_df = primary_df[primary_df.index < cutoff_ts]
             # Also filter all_tf dataframes
