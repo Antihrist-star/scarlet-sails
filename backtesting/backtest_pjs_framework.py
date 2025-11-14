@@ -303,6 +303,79 @@ class RiskPenaltyComponent:
         return min(penalty, 1.0)
 
 
+class RegimeDetectorComponent:
+    """
+    Detects market regime (BULL, BEAR, SIDEWAYS) based on SMA
+
+    Uses:
+    - SMA 50 vs SMA 200 for main trend
+    - ATR for volatility context
+    """
+
+    def __init__(self, enabled: bool = False):
+        self.enabled = enabled
+
+    def detect(self, ohlcv: pd.DataFrame, idx: int) -> str:
+        """
+        Detect regime at bar idx
+
+        Returns: 'bull', 'bear', or 'sideways'
+        """
+        if not self.enabled or idx < 200:
+            return 'sideways'
+
+        try:
+            # Calculate SMAs
+            sma_50 = ohlcv['close'].iloc[max(0, idx-50):idx].mean()
+            sma_200 = ohlcv['close'].iloc[max(0, idx-200):idx].mean()
+            current_price = ohlcv.iloc[idx]['close']
+
+            # Detect regime
+            if current_price > sma_50 > sma_200:
+                return 'bull'
+            elif current_price < sma_50 < sma_200:
+                return 'bear'
+            else:
+                return 'sideways'
+        except:
+            return 'sideways'
+
+
+class CrisisDetectorComponent:
+    """
+    Detects market crisis conditions based on volatility
+
+    Criteria:
+    - High ATR > threshold
+    - Sharp price moves
+    """
+
+    def __init__(self, enabled: bool = False, atr_multiplier: float = 2.0):
+        self.enabled = enabled
+        self.atr_multiplier = atr_multiplier
+
+    def detect(self, ohlcv: pd.DataFrame, idx: int, atr_baseline: float = 0.02) -> bool:
+        """
+        Detect if market is in crisis
+
+        Returns: True if crisis detected, False otherwise
+        """
+        if not self.enabled or idx < 20:
+            return False
+
+        try:
+            # Calculate ATR
+            recent_high_low = (ohlcv['high'].iloc[max(0, idx-14):idx] -
+                              ohlcv['low'].iloc[max(0, idx-14):idx]).max()
+            avg_price = ohlcv['close'].iloc[max(0, idx-14):idx].mean()
+            current_atr_pct = recent_high_low / avg_price
+
+            # Crisis if ATR > baseline * multiplier
+            return current_atr_pct > (atr_baseline * self.atr_multiplier)
+        except:
+            return False
+
+
 class FilterComponent:
     """
     Implements ∏I_k - произведение всех фильтров
@@ -375,6 +448,12 @@ class PjSBacktestEngine:
         self.signals_breakdown = []  # For analysis
 
         # Initialize components
+        self.regime_detector = RegimeDetectorComponent(
+            enabled=config.filters_enabled  # Enable if filters are enabled
+        )
+        self.crisis_detector = CrisisDetectorComponent(
+            enabled=config.filters_enabled
+        )
         self.opportunity_scorer = OpportunityScorerComponent(
             enabled=config.opportunity_enabled
         )
@@ -425,10 +504,13 @@ class PjSBacktestEngine:
         # Signal passed all checks
         components.ml_score = ml_score
 
-        # 2. Filters (∏I_k)
+        # 2. Filters (∏I_k) - NOW USING REAL DETECTION
+        crisis_detected = self.crisis_detector.detect(ohlcv, idx)
+        regime = self.regime_detector.detect(ohlcv, idx)
+
         components.filter_product = self.filters.product(
-            crisis=False,  # TODO: get from crisis detector
-            regime='sideways',  # TODO: get from regime detector
+            crisis=crisis_detected,  # REAL crisis detection
+            regime=regime,  # REAL regime detection
             correlation=0.3,  # TODO: get from portfolio
             volume_ok=volume > 0
         )
@@ -450,8 +532,16 @@ class PjSBacktestEngine:
             position_size_pct=self.config.position_size_pct
         )
 
-        # 5. Risk Penalty
-        atr_pct = 0.02  # TODO: calculate real ATR
+        # 5. Risk Penalty - NOW USING REAL ATR
+        # Calculate real ATR
+        if idx >= 14:
+            recent_tr = (ohlcv['high'].iloc[max(0, idx-14):idx] -
+                        ohlcv['low'].iloc[max(0, idx-14):idx]).max()
+            avg_price = ohlcv['close'].iloc[max(0, idx-14):idx].mean()
+            atr_pct = recent_tr / avg_price if avg_price > 0 else 0.02
+        else:
+            atr_pct = 0.02
+
         components.risk_penalty = self.risk_penalty.penalty(
             volatility_pct=atr_pct,
             ml_score=ml_score
