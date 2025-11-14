@@ -554,7 +554,7 @@ class PjSBacktestEngine:
             # Check entry conditions
             if position is None and raw_signals[i] > 0:
                 bars_since_exit = i - last_exit_bar
-                if bars_since_exit > self.config.cooldown_bars:
+                if bars_since_exit >= self.config.cooldown_bars:
                     # Calculate P_j(S)
                     pjs, components = self.calculate_pjs(
                         ml_score=ml_scores[i],
