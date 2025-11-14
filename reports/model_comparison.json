@@ -1,0 +1,58 @@
+{
+  "rule_based": {
+    "stats": {
+      "total_trades": 1065,
+      "winning_trades": 262,
+      "losing_trades": 803,
+      "win_rate": 24.60093896713615,
+      "profit_factor": 0.8860263147032953,
+      "total_pnl": -73.93306290246053,
+      "avg_pnl": -0.06942071634033853,
+      "avg_win": 2.1937111187485505,
+      "avg_loss": -0.8078273673905113
+    },
+    "signal_count": 1065
+  },
+  "ml": {
+    "stats": {
+      "total_trades": 0,
+      "winning_trades": 0,
+      "losing_trades": 0,
+      "win_rate": 0,
+      "profit_factor": 0,
+      "total_pnl": 0,
+      "avg_pnl": 0,
+      "avg_win": 0,
+      "avg_loss": 0
+    },
+    "signal_count": 0
+  },
+  "hybrid": {
+    "stats": {
+      "total_trades": 0,
+      "winning_trades": 0,
+      "losing_trades": 0,
+      "win_rate": 0,
+      "profit_factor": 0,
+      "total_pnl": 0,
+      "avg_pnl": 0,
+      "avg_win": 0,
+      "avg_loss": 0
+    },
+    "signal_count": 0
+  },
+  "overlap_analysis": {
+    "rule_signals_total": 1065,
+    "ml_signals_total": 0,
+    "hybrid_signals_total": 0,
+    "rule_only": 1065,
+    "ml_only": 0,
+    "hybrid_only": 0,
+    "rule_and_ml": 0,
+    "rule_and_hybrid": 0,
+    "ml_and_hybrid": 0,
+    "all_three": 0,
+    "rule_only_wr": 24.60093896713615,
+    "rule_only_pnl": -73.93306290246053
+  }
+}
