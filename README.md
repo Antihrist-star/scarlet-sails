@@ -1,4 +1,4 @@
-# 🚀 Scarlet Sails - Algorithmic Trading System
+# Scarlet SAIls - (ScSAI)
 
 Advanced algorithmic cryptocurrency trading system combining Rule-Based, ML, and Hybrid strategies.
 
