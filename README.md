@@ -10,8 +10,8 @@ Automated trading platform combining Rule-Based, Machine Learning (XGBoost), Rei
 
 **Goal**: Create a profitable automated trading system targeting 10-25% monthly returns through mean-reversion strategies on BTC/USDT and altcoin markets.
 
-**Status**: ✅ **Architecture Phase Complete** (Week 1-2)  
-**Next**: 🚀 **Training Phase** - "Глубоководный горизонт - 1" (45 days)
+**Status**: ✅ **Architecture Phase Complete**  
+**Next**: 🚀 **Training Phase** - "Глубоководный горизонт 
 
 ### **Key Achievements**
 
