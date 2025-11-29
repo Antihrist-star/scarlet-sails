@@ -1,10 +1,12 @@
-"""Train XGBoost v3
+"""
+Train XGBoost v3
 ================
 
 Обучение XGBoost модели на 74 features (single timeframe).
 
 Использование:
-    python scripts/train_xgboost_v3.py
+    python scripts/train_xgboost_v3.py --coin BTC --tf 15m
+    python scripts/train_xgboost_v3.py --coin ETH --tf 1h
 
 Результат:
     models/xgboost_v3_{coin}_{tf}.json
@@ -15,6 +17,7 @@ import pandas as pd
 import numpy as np
 import xgboost as xgb
 import json
+import argparse
 from pathlib import Path
 from datetime import datetime
 from sklearn.metrics import (
@@ -39,17 +42,20 @@ def load_data(parquet_path: str) -> tuple:
     print(f"   Размер: {len(df):,} строк, {len(df.columns)} колонок")
     print(f"   Период: {df.index[0]} — {df.index[-1]}")
     
+    # Разделить features и target
     if 'target' not in df.columns:
         raise ValueError("Колонка 'target' не найдена!")
     
     X = df.drop(columns=['target'])
     y = df['target']
     
+    # Проверить на inf/nan
     inf_count = np.isinf(X.values).sum()
     nan_count = np.isnan(X.values).sum()
     
     if inf_count > 0 or nan_count > 0:
         print(f"   ⚠️ Найдено inf: {inf_count}, nan: {nan_count}")
+        # Заменить inf на nan, затем заполнить
         X = X.replace([np.inf, -np.inf], np.nan)
         X = X.fillna(0)
     
@@ -62,6 +68,11 @@ def load_data(parquet_path: str) -> tuple:
 def temporal_split(X, y, train_ratio: float = 0.8) -> tuple:
     """
     Временной split (без перемешивания).
+    
+    Returns
+    -------
+    tuple
+        (X_train, X_test, y_train, y_test, split_idx)
     """
     split_idx = int(len(X) * train_ratio)
     
@@ -70,7 +81,7 @@ def temporal_split(X, y, train_ratio: float = 0.8) -> tuple:
     y_train = y.iloc[:split_idx]
     y_test = y.iloc[split_idx:]
     
-    print(f"\n📄 Split:")
+    print(f"\n📊 Split:")
     print(f"   Train: {len(X_train):,} samples ({train_ratio:.0%})")
     print(f"   Test:  {len(X_test):,} samples ({1-train_ratio:.0%})")
     print(f"   Train class 1: {y_train.mean():.2%}")
@@ -79,14 +90,31 @@ def temporal_split(X, y, train_ratio: float = 0.8) -> tuple:
     return X_train, X_test, y_train, y_test, split_idx
 
 
-def train_model(X_train, y_train, X_test, y_test, params: dict = None) -> xgb.XGBClassifier:
+def train_model(
+    X_train, y_train, 
+    X_test, y_test,
+    params: dict = None
+) -> xgb.XGBClassifier:
     """
     Обучить XGBoost модель.
+    
+    Parameters
+    ----------
+    X_train, y_train : обучающие данные
+    X_test, y_test : тестовые данные
+    params : параметры модели (опционально)
+    
+    Returns
+    -------
+    xgb.XGBClassifier
+        Обученная модель
     """
+    # Рассчитать scale_pos_weight для imbalanced data
     neg_count = (y_train == 0).sum()
     pos_count = (y_train == 1).sum()
     scale_pos_weight = neg_count / pos_count if pos_count > 0 else 1.0
     
+    # Базовые параметры (консервативные, без переобучения)
     default_params = {
         'objective': 'binary:logistic',
         'eval_metric': 'auc',
@@ -112,6 +140,7 @@ def train_model(X_train, y_train, X_test, y_test, params: dict = None) -> xgb.XG
         if k not in ['n_jobs', 'random_state']:
             print(f"   {k}: {v}")
     
+    # Обучение
     print(f"\n🚀 Обучение...")
     
     model = xgb.XGBClassifier(**default_params)
@@ -123,9 +152,15 @@ def train_model(X_train, y_train, X_test, y_test, params: dict = None) -> xgb.XG
     
     return model
 
+
 def evaluate_model(model, X_test, y_test, threshold: float = 0.5) -> dict:
     """
     Оценить качество модели.
+    
+    Returns
+    -------
+    dict
+        Метрики качества
     """
     y_proba = model.predict_proba(X_test)[:, 1]
     y_pred = (y_proba >= threshold).astype(int)
@@ -139,6 +174,7 @@ def evaluate_model(model, X_test, y_test, threshold: float = 0.5) -> dict:
         "threshold": threshold
     }
     
+    # Confusion matrix
     cm = confusion_matrix(y_test, y_pred)
     metrics["confusion_matrix"] = cm.tolist()
     metrics["true_negatives"] = int(cm[0, 0])
@@ -155,6 +191,7 @@ def find_optimal_threshold(model, X_test, y_test) -> dict:
     """
     y_proba = model.predict_proba(X_test)[:, 1]
     precision, recall, thresholds = precision_recall_curve(y_test, y_proba)
+    
     f1_scores = 2 * (precision * recall) / (precision + recall + 1e-8)
     best_idx = np.argmax(f1_scores[:-1])
     
@@ -166,17 +203,31 @@ def find_optimal_threshold(model, X_test, y_test) -> dict:
     }
 
 
-def save_model(model: xgb.XGBClassifier, output_path: str, feature_names: list, metrics: dict, threshold_info: dict, parquet_path: str):
+def save_model(
+    model: xgb.XGBClassifier,
+    output_path: str,
+    feature_names: list,
+    metrics: dict,
+    threshold_info: dict,
+    parquet_path: str,
+    coin: str,
+    timeframe: str
+):
     """
     Сохранить модель и metadata.
     """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Сохранить модель
     model.save_model(str(output_path))
     print(f"\n💾 Модель: {output_path}")
     
+    # Сохранить metadata
     metadata = {
         "created_at": datetime.now().isoformat(),
+        "coin": coin,
+        "timeframe": timeframe,
         "source_data": parquet_path,
         "n_features": len(feature_names),
         "feature_names": feature_names,
@@ -196,52 +247,84 @@ def print_results(metrics: dict, threshold_info: dict, criteria: dict):
     Вывести результаты и проверить критерии.
     """
     print("\n" + "="*60)
-    print("📄 РЕЗУЛЬТАТЫ")
+    print("📊 РЕЗУЛЬТАТЫ")
     print("="*60)
+    
     print(f"\n   Threshold 0.5:")
     print(f"   AUC:       {metrics['auc']:.4f}")
     print(f"   F1:        {metrics['f1']:.4f}")
     print(f"   Precision: {metrics['precision']:.4f}")
     print(f"   Recall:    {metrics['recall']:.4f}")
+    
     print(f"\n   Optimal threshold ({threshold_info['optimal_threshold']:.3f}):")
     print(f"   F1:        {threshold_info['best_f1']:.4f}")
     print(f"   Precision: {threshold_info['precision_at_best']:.4f}")
     print(f"   Recall:    {threshold_info['recall_at_best']:.4f}")
+    
     print(f"\n   Confusion Matrix:")
     print(f"   TN: {metrics['true_negatives']:,}  FP: {metrics['false_positives']:,}")
     print(f"   FN: {metrics['false_negatives']:,}  TP: {metrics['true_positives']:,}")
+    
+    # Проверка критериев
     print("\n" + "="*60)
     print("✅ КРИТЕРИИ")
     print("="*60)
+    
     checks = {
         "AUC > 0.60": metrics['auc'] > criteria.get('auc', 0.60),
         "F1 > 0.50": threshold_info['best_f1'] > criteria.get('f1', 0.50),
         "Precision > 0.45": threshold_info['precision_at_best'] > criteria.get('precision', 0.45),
         "Recall > 0.40": threshold_info['recall_at_best'] > criteria.get('recall', 0.40)
     }
+    
     all_pass = True
     for name, passed in checks.items():
         status = "✅" if passed else "❌"
         print(f"   {status} {name}")
         if not passed:
             all_pass = False
+    
     print("\n" + "="*60)
     if all_pass:
         print("🎉 ВСЕ КРИТЕРИИ ПРОЙДЕНЫ!")
     else:
-        print("⚠️  НЕ ВСЕ КРИТЕРИИ ПРОЙДЕНЫ")
+        print("⚠️ НЕ ВСЕ КРИТЕРИИ ПРОЙДЕНЫ")
     print("="*60)
+    
     return all_pass
 
 
 def main():
     """Главная функция."""
+    
+    # Парсинг аргументов командной строки
+    parser = argparse.ArgumentParser(description='Обучение XGBoost v3')
+    parser.add_argument('--coin', type=str, default='BTC', 
+                       help='Монета (BTC, ETH, SOL, ...)')
+    parser.add_argument('--tf', type=str, default='15m',
+                       help='Таймфрейм (15m, 1h, 4h, 1d)')
+    args = parser.parse_args()
+    
     print("\n" + "="*60)
-    print("🚀 XGBOOST TRAINING v3")
+    print(f"🚀 XGBOOST TRAINING v3: {args.coin}/{args.tf}")
     print("="*60)
     
-    PARQUET_PATH = "data/features/BTC_USDT_15m_features.parquet"
-    OUTPUT_PATH = "models/xgboost_v3_btc_15m.json"
+    # Конфигурация на основе аргументов
+    PARQUET_PATH = f"data/features/{args.coin}_USDT_{args.tf}_features.parquet"
+    OUTPUT_PATH = f"models/xgboost_v3_{args.coin.lower()}_{args.tf}.json"
+    
+    # Проверить что файл существует
+    if not Path(PARQUET_PATH).exists():
+        print(f"\n❌ ОШИБКА: Файл не найден: {PARQUET_PATH}")
+        print(f"   Доступные файлы:")
+        data_dir = Path("data/features")
+        if data_dir.exists():
+            parquet_files = list(data_dir.glob("*.parquet"))
+            for f in sorted(parquet_files)[:10]:
+                print(f"   - {f.name}")
+        return False
+    
+    # Критерии успеха
     CRITERIA = {
         "auc": 0.60,
         "f1": 0.50,
@@ -249,23 +332,36 @@ def main():
         "recall": 0.40
     }
     
+    # 1. Загрузить данные
     X, y, feature_names, df = load_data(PARQUET_PATH)
+    
+    # 2. Split
     X_train, X_test, y_train, y_test, split_idx = temporal_split(X, y, 0.8)
+    
+    # 3. Обучить
     model = train_model(X_train, y_train, X_test, y_test)
+    
+    # 4. Оценить
     metrics = evaluate_model(model, X_test, y_test, threshold=0.5)
     threshold_info = find_optimal_threshold(model, X_test, y_test)
+    
+    # 5. Вывести результаты
     all_pass = print_results(metrics, threshold_info, CRITERIA)
     
+    # 6. Сохранить
     save_model(
         model=model,
         output_path=OUTPUT_PATH,
         feature_names=feature_names,
         metrics=metrics,
         threshold_info=threshold_info,
-        parquet_path=PARQUET_PATH
+        parquet_path=PARQUET_PATH,
+        coin=args.coin,
+        timeframe=args.tf
     )
     
     print(f"\n✅ Готово!")
+    
     return all_pass
 
 
