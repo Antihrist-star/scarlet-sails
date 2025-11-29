@@ -104,7 +104,8 @@ def cmd_extract(args):
                 print(f"\n💾 Файл: {path}")
                 print(f"\n📤 Для отправки в GitHub:")
                 print(f"   git add {path}")
-                print(f"   git commit -m 'Pattern: {data[\"id\"]}'")
+                pattern_id = data["id"]
+                print(f"   git commit -m 'Pattern: {pattern_id}'")
                 print(f"   git push")
         
     except FileNotFoundError as e:
