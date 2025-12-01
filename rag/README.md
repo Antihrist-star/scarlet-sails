@@ -86,10 +86,10 @@ git push
 
 ### Базовая команда
 ```bash
-python3 -m rag.cli BTC 1h "2024-11-26 14:00"
+python3 -m rag.cli BTC 1h "2024-11-26 14:00" --direction long
 ```
 
-### С указанием направления (short)
+### С указанием направления (short | long)
 ```bash
 python3 -m rag.cli ETH 15m "2024-11-26 09:30" --direction short
 ```
