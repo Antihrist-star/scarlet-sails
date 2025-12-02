@@ -4,6 +4,7 @@ Train XGBoost v3 with temporal split and fee-adjusted targets.
 
 import argparse
 import json
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -19,14 +20,17 @@ from analysis.simple_threshold_backtest import (
 from core.feature_engine_v2 import FeatureSpecV3
 from core.feature_loader import FeatureLoader
 
+logger = logging.getLogger(__name__)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train XGBoost v3 model")
     parser.add_argument("--config-path", type=str, default="configs/model2_training.yaml")
     parser.add_argument("--experiment-name", type=str, default="default")
-    parser.add_argument("--coin", type=str, help="Override coin from config (e.g., BTCUSDT)")
+    parser.add_argument("--coin", type=str, help="Override coin from config (e.g., BTC)")
     parser.add_argument("--tf", type=str, help="Override timeframe from config (e.g., 15m)")
     parser.add_argument("--no-backtest", action="store_true", help="Skip threshold optimization")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
     return parser.parse_args()
 
 
@@ -63,17 +67,91 @@ def compute_targets(df: pd.DataFrame, horizon: int, commission: float, slippage:
     return df.dropna(subset=["target"])
 
 
-def temporal_split(df: pd.DataFrame, train_start: str, train_end: str, val_end: str, test_end: Optional[str]) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def temporal_split(
+    df: pd.DataFrame,
+    train_start: str,
+    train_end: str,
+    val_end: str,
+    test_end: Optional[str]
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Split DataFrame into train/val/test sets by temporal boundaries.
+    
+    Handles both tz-aware and tz-naive datetime indices correctly.
+    
+    Args:
+        df: DataFrame with DatetimeIndex
+        train_start: Start of training period (ISO format string)
+        train_end: End of training period (start of validation)
+        val_end: End of validation period (start of test)
+        test_end: End of test period (None = use all remaining data)
+    
+    Returns:
+        Tuple of (train_df, val_df, test_df)
+    
+    Raises:
+        TypeError: If df.index is not a DatetimeIndex
+    """
     df_sorted = df.sort_index()
-
-    train_mask = (df_sorted.index >= pd.Timestamp(train_start)) & (df_sorted.index < pd.Timestamp(train_end))
-    val_mask = (df_sorted.index >= pd.Timestamp(train_end)) & (df_sorted.index < pd.Timestamp(val_end))
-    if test_end:
-        test_mask = (df_sorted.index >= pd.Timestamp(val_end)) & (df_sorted.index < pd.Timestamp(test_end))
+    
+    if not isinstance(df_sorted.index, pd.DatetimeIndex):
+        raise TypeError(f"temporal_split expects a DatetimeIndex, got {type(df_sorted.index)}")
+    
+    idx = df_sorted.index
+    
+    # Handle timezone-aware vs timezone-naive indices
+    if idx.tz is not None:
+        # Index is tz-aware (e.g., UTC) -> convert boundaries to same timezone
+        tz = idx.tz
+        logger.info(f"Index is tz-aware (timezone: {tz})")
+        
+        train_start_ts = pd.Timestamp(train_start, tz=tz)
+        train_end_ts = pd.Timestamp(train_end, tz=tz)
+        val_end_ts = pd.Timestamp(val_end, tz=tz)
+        test_end_ts = pd.Timestamp(test_end, tz=tz) if test_end else None
     else:
-        test_mask = df_sorted.index >= pd.Timestamp(val_end)
-
-    return df_sorted[train_mask], df_sorted[val_mask], df_sorted[test_mask]
+        # Index is tz-naive -> keep boundaries tz-naive
+        logger.info("Index is tz-naive")
+        
+        train_start_ts = pd.Timestamp(train_start)
+        train_end_ts = pd.Timestamp(train_end)
+        val_end_ts = pd.Timestamp(val_end)
+        test_end_ts = pd.Timestamp(test_end) if test_end else None
+    
+    # Log data range and split boundaries
+    logger.info(f"Data range: {idx.min()} to {idx.max()}")
+    logger.info(f"Train period: {train_start_ts} to {train_end_ts}")
+    logger.info(f"Val period: {train_end_ts} to {val_end_ts}")
+    if test_end_ts:
+        logger.info(f"Test period: {val_end_ts} to {test_end_ts}")
+    else:
+        logger.info(f"Test period: {val_end_ts} to end")
+    
+    # Create masks for each period
+    train_mask = (idx >= train_start_ts) & (idx < train_end_ts)
+    val_mask = (idx >= train_end_ts) & (idx < val_end_ts)
+    
+    if test_end_ts is not None:
+        test_mask = (idx >= val_end_ts) & (idx < test_end_ts)
+    else:
+        test_mask = idx >= val_end_ts
+    
+    train_df = df_sorted[train_mask]
+    val_df = df_sorted[val_mask]
+    test_df = df_sorted[test_mask]
+    
+    # Log split sizes
+    logger.info(f"Split sizes: train={len(train_df)}, val={len(val_df)}, test={len(test_df)}")
+    
+    # Warn if any split is empty
+    if len(train_df) == 0:
+        logger.warning("Training set is empty! Check date ranges.")
+    if len(val_df) == 0:
+        logger.warning("Validation set is empty! Check date ranges.")
+    if len(test_df) == 0:
+        logger.warning("Test set is empty! Check date ranges.")
+    
+    return train_df, val_df, test_df
 
 
 def build_dmatrices(train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFrame, spec: FeatureSpecV3):
@@ -140,6 +218,14 @@ def save_model(model: xgb.XGBClassifier, output_path: Path, feature_spec: Featur
 
 def main():
     args = parse_args()
+    
+    # Setup logging
+    log_level = logging.INFO if args.verbose else logging.WARNING
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
     cfg = load_config(args.config_path)
 
     model_cfg = cfg["model2"]
@@ -149,6 +235,14 @@ def main():
     # Override coin and timeframe from CLI if provided
     coin = args.coin if args.coin else model_cfg.get("coin", "BTC")
     timeframe = args.tf if args.tf else model_cfg.get("timeframe", "15m")
+
+    print(f"\n{'='*60}")
+    print(f"Training XGBoost v3 Model")
+    print(f"{'='*60}")
+    print(f"Coin: {coin}")
+    print(f"Timeframe: {timeframe}")
+    print(f"Config: {args.config_path}")
+    print(f"{'='*60}\n")
 
     loader = FeatureLoader(data_dir=model_cfg.get("data_dir", "data/features"))
     file_path = loader.get_file_path(coin, timeframe)
@@ -160,6 +254,12 @@ def main():
         validate=True
     )
 
+    print(f"Loaded {len(df)} rows from {file_path}")
+    print(f"Data index type: {type(df.index)}")
+    if isinstance(df.index, pd.DatetimeIndex):
+        print(f"Timezone: {df.index.tz if df.index.tz else 'tz-naive'}")
+        print(f"Data range: {df.index.min()} to {df.index.max()}\n")
+
     df_with_targets = compute_targets(
         df,
         horizon=model_cfg["horizon_bars"],
@@ -168,6 +268,7 @@ def main():
         target_type=model_cfg.get("target_type", "fee_ret"),
     )
 
+    print("Splitting data into train/val/test sets...")
     train_df, val_df, test_df = temporal_split(
         df_with_targets,
         train_start=model_cfg["train_start"],
@@ -175,6 +276,9 @@ def main():
         val_end=model_cfg["val_end"],
         test_end=model_cfg.get("test_end"),
     )
+    print(f"  Train: {len(train_df)} samples")
+    print(f"  Val:   {len(val_df)} samples")
+    print(f"  Test:  {len(test_df)} samples\n")
 
     feature_spec = FeatureSpecV3.from_dataframe(train_df)
     if feature_spec.n_features != 74:
@@ -182,17 +286,24 @@ def main():
 
     X_train, X_val, X_test, y_train, y_val, y_test = build_dmatrices(train_df, val_df, test_df, feature_spec)
 
+    print("Training XGBoost model...")
     model_params = model_cfg.get("xgboost_params", {})
     model = train_model(X_train, y_train, X_val, y_val, model_params)
+    print("Model training complete.\n")
 
+    print("Evaluating model performance...")
     metrics_train = evaluate_model(model, X_train, y_train, threshold=0.5)
     metrics_val = evaluate_model(model, X_val, y_val, threshold=0.5)
     metrics_test = evaluate_model(model, X_test, y_test, threshold=0.5)
+    print(f"  Train AUC: {metrics_train['auc']:.4f}")
+    print(f"  Val AUC:   {metrics_val['auc']:.4f}")
+    print(f"  Test AUC:  {metrics_test['auc']:.4f}\n")
 
     # Threshold optimization on validation set
     optimal = {"threshold": 0.5, "sharpe": 0.0, "backtest_metrics": {}}
     
     if not args.no_backtest:
+        print("Optimizing threshold on validation set...")
         val_prob = model.predict_proba(X_val)[:, 1]
         
         # Add probabilities to validation dataframe
@@ -220,8 +331,9 @@ def main():
         print(f"  Sharpe ratio: {optimal['sharpe']:.4f}")
         print(f"  Trades: {optimal['backtest_metrics'].get('n_trades', 0)}")
         print(f"  Win rate: {optimal['backtest_metrics'].get('win_rate', 0):.2f}%")
+        print(f"  Max DD: {optimal['backtest_metrics'].get('max_drawdown_pct', 0):.2f}%\n")
     else:
-        print("\nSkipping threshold optimization (--no-backtest flag)")
+        print("Skipping threshold optimization (--no-backtest flag)\n")
 
     output_path = Path(model_cfg.get("output_path", f"models/xgboost_v3_{coin.lower()}_{timeframe}.json"))
     metadata = {
@@ -248,9 +360,11 @@ def main():
         "test": metrics_test,
         "best_threshold": optimal,
     }
-    print("\n" + "="*60)
+    print("=" * 60)
+    print("TRAINING SUMMARY")
+    print("=" * 60)
     print(json.dumps(summary, indent=2))
-    print("="*60)
+    print("=" * 60)
     print(f"\nModel saved to: {output_path}")
     print(f"Metadata saved to: {output_path.with_name(output_path.stem + '_metadata.json')}")
 
