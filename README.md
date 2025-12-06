@@ -1,7 +1,6 @@
 # ScArlet-Sails
 
 **Algorithmic trading system combining quantitative strategies with LLM Council for pattern-based decision making.**
-![Uploading image.png…]()
 
 ## Overview
 
